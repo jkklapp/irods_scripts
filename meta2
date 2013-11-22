@@ -1,0 +1,23 @@
+#!/bin/sh
+units=""
+
+if [ $# '<' 3 -o $# '>' 4 ]; then
+	echo "usage: meta2 <search-pattern> <attr-name> <attr-value> [attr-unit]"
+	echo "search-pattern examples: %chan2000%uvs%, %.out%, /fluidMec/home/rods/wamba10/%"
+	echo "Try 'ilocate <search-pattern>' first to make sure those are the files you are interested in."
+exit 255
+fi
+
+if [ $# -eq 3 ]; then
+	units=$4
+fi
+
+for file in `ilocate $1`;do
+	imeta add -d $file $2 "$3" $units
+	if [ $? '!=' 0 ]; then
+		echo "Error executing: imeta -d "$file $2 $3 $units
+		exit 255
+	fi
+done
+
+#find /wamba* -name chan2000*.uvs -type f

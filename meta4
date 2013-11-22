@@ -1,0 +1,30 @@
+
+#!/bin/sh
+IFS='
+'
+if [ $# '<' 2 -o $# '>' 3 ]; then
+	echo "Usage: input_files | meta4 <attr-name> <attr-value> [attr-unit]"
+	echo "Note: you have to pipe a list of files like '<machine>/<root>/<file-path>'. See the wiki for more help."
+	exit 255
+fi
+
+# if [ $# '==' 3 ]; then
+# 	INPUT=$4
+
+# if [ $# '==' 2 ]; then
+# 	INPUT=$3
+# fi
+INPUT=$3
+
+
+for file in `cat $INPUT`;do
+    #eval "$imeta2 -d /fluidMec/home/rods/$file $name "$value" $unit"
+	#echo "imeta add -d /fluidMec/home/rods/"$file $1 "$2" $3"
+	imeta add -d /fluidMec/home/rods/$file $1 "$2" $3
+	
+        # if [ $? '!=' 0 ]; then
+	# 	echo "Error executing: imeta -d "$file $1 $2 $3" "
+	# 	exit 255
+	# fi
+done
+

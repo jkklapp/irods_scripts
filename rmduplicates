@@ -1,0 +1,12 @@
+#/bin/sh
+IFS='
+'
+cd /home/rodsadmin/fake_trees
+
+for file in `find $1 -type f`;do
+	n=`imeta ls -d /fluidMec/home/rods/$file | wc -l`
+	if [ $n '>' 4 ]; then
+		imeta rmw -d /fluidMec/home/rods/$file "$2" % %
+#		echo "$file"
+	fi
+done

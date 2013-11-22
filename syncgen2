@@ -1,0 +1,231 @@
+#/bin/sh
+####################################################################
+# Maintained by Jaakko Lappalainen. jaakko@torroja.dmt.upm.es - 2012
+############### rods password ######################################
+RODS_PASS='rods_*1234'
+############## rods authentication program path ####################
+RODS_AUTH_EXEC='/home/rodsadmin/iRODS/clients/icommands/bin/iinit'
+################## locking vars ####################################
+_HOME='/home/rodsadmin'
+FAKE_TREES_HOME=$_HOME'/fake_trees'
+RODS_HOME='/fluidMec/home/rods'
+OUT_FILES_HOME=$_HOME'/out_files'
+PROCESSING_FILES=$_HOME'/processing_files'
+METAPOS_MTIME=2
+METAPOS_SIZE=1
+METAPOS_FILE=3
+IFS='
+'
+log(){
+	echo "["`date +"%x %T"`"] "$1 >> $LOG
+}
+
+log_sep(){
+	echo "--------------------------------------------------------------" >> $LOG
+}
+
+do_exit(){
+    rm -f "$PIDFILE"
+    rm -f "$INPUT_FILE"
+}
+
+do_exit_error(){
+	log "EXITING SCRIPT..."
+	log_sep
+	do_exit
+	exit 255
+}
+
+addmetadata(){
+	
+	name=$1
+	attname=$2
+	attvalue=$3
+#	echo "name: "$name" attname: "$attname" attvalue: "$attvalue
+	if [ -z "$name" ]; then
+	if [ -z "$attvalue" ]; then
+	if [ -z "$attname" ]; then
+	#echo "name: "$name" attname: "$attname" attvalue: "$attvalue 
+	
+	if [ "$attname" == "Modification_time" ]; then
+#		if [ $? '<' 1 ]; then
+			meta_q=`imeta ls -d "$name" "$attname" | awk ' /value:/ { print $2" "$3 }' | head -n1`
+#		fi
+	fi
+	
+
+	if [ "$attname" == "Size" ]; then
+#		if [ $? '<' 1 ]; then
+        		meta_q=`imeta ls -d "$name" "$attname" | awk ' /value:/ { print $2" "$3 }' | head -n1`
+#		fi
+	fi
+	q=$meta_q
+	if [ "$q" != "" ]; then
+		if [ "$q" != "$attvalue" ]; then
+			if [ "$attname" == "Modification_time" ]; then
+                        	echo -e 'add -d '"$name"' '\"$attname\"' '\"$attvalue\" >> $METAFILE
+                	else	
+				echo 'mod -d '"$name" "$attname" "$q"' v:'"$attvalue" >> $METAFILE
+			fi
+		fi
+	else
+		if [ "$attname" == "Modification_time" ]; then
+			echo -e 'add -d '"$name"' '\"$attname\"' '\"$attvalue\" >> $METAFILE
+		else
+                	echo 'add -d '"$name"' '"$attname"' '"$attvalue" >> $METAFILE
+		fi
+	fi
+	fi
+	fi
+	fi
+	#rm -f $METAFILE
+}
+
+sync2(){
+	log "Syncing local-rods copy..."
+	imkdir -p "$RODS_HOME"/"$DIR"
+	ireg -f -R torroja -C "$FAKE_TREES_HOME"/"$DIR" "$RODS_HOME"/"$DIR" >> $LOG
+	log "Checking for default metadata changes in '"$DIR"'..."
+        #rm -f $METAFILE
+	
+        while read line;do
+	       	name=`echo "$line" | cut -d '|' -f "$METAPOS_FILE"`
+               	mtime=`echo "$line" | cut -d '|' -f "$METAPOS_MTIME"`
+               	size=`echo "$line" | cut -d '|' -f "$METAPOS_SIZE"`
+		addmetadata "$RODS_HOME"/"$DIR"/"$name" "Modification_time" $mtime
+		addmetadata "$name" "Size" $size	
+       	done < $INPUT_FILE
+	if [ -f $METAFILE ]; then
+		log "Adding metadata..."
+		cat -s $METAFILE | imeta > /dev/null
+		#rm -f $METAFILE
+	else
+		log "No metadata changed."
+	fi
+}
+calculate_changes3(){
+	log "Calculating changes..."
+	mkdir -p "$FAKE_TREES_HOME"/"$DIR"
+	ls -1 "$FAKE_TREES_HOME"/"$DIR" > $CURRENTFILE
+	cat -s $INPUT_FILE |cut -d '|' -f $METAPOS_FILE | sort -u > $NEWFILE
+	comm -2 -3 --nocheck-order $NEWFILE $CURRENTFILE > $CREATEFILE
+	comm -2 -3 --nocheck-order $CURRENTFILE $NEWFILE > $DELETEFILE
+	
+	rm -f $CURRENTFILE $NEWFILE
+
+	if [ -f "$CREATEFILE" ]; then
+                n_to_create=`wc -l $CREATEFILE | awk ' { print $1 }'`
+                if [ $n_to_create -gt 0 ]; then
+                        UPDATE=1
+                        log "Files to create: "$n_to_create
+                	log "Creating fake files..."
+                	while read line;do
+                        	file=`echo $line | cut -d '|' -f $METAPOS_FILE`
+                        	touch "$FAKE_TREES_HOME"/"$DIR"/"$file"
+                	done < $CREATEFILE
+		fi
+        fi
+	if [ -f "$DELETEFILE" ]; then
+                n_to_delete=`wc -l $DELETEFILE | awk ' { print $1 } '`
+                if [ $n_to_delete '>' 0 ]; then
+                        log "Files to delete: "$n_to_delete
+			log "Deleting rods files..."
+                        while read line;do
+                                file=`echo $line | cut -d '|' -f $METAPOS_FILE`
+                                if [ "$file" '!=' "" ]; then
+                                        #if [ -f "$FAKE_TREES_HOME"/"$DIR"/"$file" ]; then
+                                        irm -Uf "$RODS_HOME"/"$DIR"/"$file"
+                                        #fi
+                                fi
+			done < $DELETEFILE
+			log "Deleting files..."
+                	while read line;do
+                        	file=`echo $line |cut -d '|' -f $METAPOS_FILE`
+				if [ "$file" '!=' "" ]; then
+					#if [ -f "$FAKE_TREES_HOME"/"$DIR"/"$file" ]; then
+                        		rm -f "$FAKE_TREES_HOME"/"$DIR"/"$file"
+					#fi
+                		fi
+			done < $DELETEFILE
+                fi
+        fi
+}
+remove_empty(){
+	if [ $UPDATE '>' 0 ]; then
+	log "Checking empty dirs and collections..."
+		cd "$FAKE_TREES_HOME"
+		for dir in `find $DIR -type d`;do
+			n=`ls "$FAKE_TREES_HOME"/"$dir" |wc -w`
+			if [ $n '<' 1 ]; then
+				rm -r "$dir"
+				irm -rf "$RODS_HOME"/"$dir"
+			fi
+		done
+	fi
+}	
+if [ $# '!=' 1 ]; then
+        echo "usage: syncgen2 <out-file-path>"
+	exit 255
+fi
+INPUT_FILE=$1
+if [ -f $INPUT_FILE ]; then
+	echo "" > /dev/null
+else
+        echo "Error: "$INPUT_FILE" no such file."
+	exit 255
+fi
+
+NAME=`basename "$INPUT_FILE"`
+mv "$INPUT_FILE" "$PROCESSING_FILES"/"$NAME"
+INPUT_FILE="$PROCESSING_FILES"/"$NAME"
+
+DIR2=`head -n1 $INPUT_FILE | cut -d '|' -f $METAPOS_FILE`
+DIR=`dirname $DIR2`
+DIRNAME=`echo "$DIR" | sed -e "s/\//-/g"`
+cat -s "$INPUT_FILE" | sed -e 's|'$DIR'\/||g' > "$INPUT_FILE".temp
+mv "$INPUT_FILE".temp "$INPUT_FILE"
+
+LOG="$_HOME"/log/"$DIRNAME".log
+
+UPDATE=0
+SCRIPTNAME=`basename $0`
+
+CURRENTFILE="$_HOME"/.temp."$DIRNAME".current
+NEWFILE="$_HOME"/.temp."$DIRNAME".new
+DELETEFILE="$_HOME"/.temp."$DIRNAME".delete
+CREATEFILE="$_HOME"/.temp."$DIRNAME".create
+METAFILE="$_HOME"/.temp."$DIRNAME".meta
+trap "rm -f $PIDFILE; rm -f $CURRENTFILE; rm -f $NEWFILE; rm -f $DELETEFILE; rm -f $CREATEFILE; rm -f $METAFILE; exit" INT TERM EXIT
+rm -f $CURRENTFILE
+rm -f $NEWFILE 
+rm -f $DELETEFILE
+rm -f $CREATEFILE
+rm -f $METAFILE
+
+mkdir -p "$_HOME"/.pids
+PIDFILE="$_HOME"/.pids/"$SCRIPTNAME"."$DIRNAME".pid
+
+############### locking ###################
+if [ -f "$PIDFILE" ]; then
+   	#verify if the process is actually still running under this pid
+   	OLDPID=`cat "$PIDFILE"`
+   	RESULT=`ps -ef | grep "$OLDPID" | grep "$SCRIPTNAME"`
+   	if [ -n "$RESULT" ]; then
+     		log "Script already running! Exiting"
+     		exit 255
+   	fi
+fi
+
+PID=`ps -ef | grep "$SCRIPTNAME" | head -n1 |  awk ' {print $2;} '`
+echo "$PID" > "$PIDFILE"
+log_sep
+log "Starting script for '"$DIR"'..."
+############ critical section ############
+calculate_changes3
+sync2
+remove_empty
+##########################################
+log "Script ended."
+log_sep
+trap - INT TERM EXIT
+do_exit

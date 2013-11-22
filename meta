@@ -1,0 +1,21 @@
+#!/bin/sh
+units=""
+
+if [ $# '<' 3 -o $# '>' 4 ]; then
+	echo "usage: meta <rods-dir-path> <attr-name> <attr-value> [attr-unit]"
+	exit 255
+fi
+
+if [ $# -eq 3 ]; then
+	units=$4
+fi
+
+for file in `ils $1 | tail -n +2 |grep -Ev 'C- /' |cut -b 3-`;do
+	imeta add -d $1/$file $2 "$3" $units
+	if [ $? '!=' 0 ]; then
+		echo "Error executing: imeta -d "$1"/"$file $2 $3 $units
+		exit 255
+	fi
+done
+
+#find /wamba* -name chan2000*.uvs -type f

@@ -1,0 +1,62 @@
+#!/bin/sh
+IFS='
+'
+if [ $# '<' 2 -o $# '>' 8 ]; then
+	echo "usage: meta3 [OPTIONS] <METADATA>"
+	echo "METADATA:"
+	echo "-a ATTR-NAME ATTR-VALUE [ATTR-UNIT]: name, value and unit of the metadata. Units are optional. For string with blanks, use \" \"."
+	echo "OPTIONS:"
+	echo "-l LOCATION: 'machine/root' e.g.: wamba/wambaXX, alacena/alacena, ... Using all if not specified."
+	echo "-p SEARCH-PATTERN: This program does 'find LOCATION -name SEARCH-PATTERN -type f' to get files. Use accordingly. Using all if not specified."
+	exit 255
+
+fi
+
+if [ $1 = "-a" ]; then
+	name=$2
+	value=$3
+	unit=$4
+fi
+if [ "$3" = "-a" ]; then
+        name=$4
+        value=$5
+        unit=$6
+fi
+if [ "$5" = "-a" ]; then
+        name=$6
+        value=$7
+        unit=$8
+fi
+
+if [ "$1" = "-l" ]; then
+	location=$2
+else
+	location="*"
+fi
+if [ $3 = "-l" ]; then
+        location=$4
+else
+        location="*"
+fi
+
+if [ "$1" = "-p" ]; then
+#	declare -a pattern
+	pattern[0]="-name"
+	pattern[1]=$2
+fi
+if [ "$3" = "-p" ]; then
+ #       declare -a pattern
+        pattern[0]="-name"
+        pattern[1]=$4
+fi
+
+cd /home/rodsadmin/fake_trees
+for file in `find $location ${pattern[@]} -type f`;do
+#	imeta add -d /fluidMec/home/rods/$file $name "$value" $unit
+	echo "imeta add -d /fluidMec/home/rods/"$file $name "$value" $unit
+	if [ $? '!=' 0 ]; then
+		echo "Error executing: imeta -d "$file $2 $3 $units
+		exit 255
+	fi
+done
+

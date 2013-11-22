@@ -1,0 +1,26 @@
+#!/bin/sh -e
+
+INPUT_FILE=`cut -d '|' -f 3 $1 > $1.tmp`
+IFS='
+'
+INPUT_FILE=$1.tmp
+nlines=`wc -l $INPUT_FILE | awk ' { print $1 } '`
+
+echo "Input lines: "$nlines
+
+base_line=`awk '{print $1}' $INPUT_FILE | sort -nk 1 | head -1`
+
+echo "Base line: "$base_line
+
+#exit 128
+
+while true;do
+	candidate=`dirname $base_line`
+	base_line=$candidate
+	ntest=`grep $candidate $INPUT_FILE |wc -l`
+	if [ $ntest -eq $nlines ]; then
+		echo $candidate
+		rm -f $INPUT_FILE
+		return 0;
+	fi
+done	

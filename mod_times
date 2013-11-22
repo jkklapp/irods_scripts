@@ -1,0 +1,12 @@
+#!/bin/sh
+IFS='
+'
+cd /home/rodsadmin/fake_trees
+
+for file in `find $1 -type f`;do
+	q=`imeta ls -d $file "Modification time" |grep value: | awk '{print $2" "$3}'`
+	if [ $q ]; then
+		imeta mod -d $file "Modification time" "$q" n:Modification_time
+		#echo $file
+	fi
+done

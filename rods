@@ -1,0 +1,59 @@
+#!/bin/bash -e
+####################################################################
+# Maintained by Jaakko Lappalainen. jaakko@torroja.dmt.upm.es - 2012
+####################################################################
+METAPOS_FILE=3
+_HOME='/home/rodsadmin'
+OUT_FILES_PATH=$_HOME'/out_files'
+SORT_FILES_PATH=$_HOME'/sort_files'
+INPUT_FILES_PATH=$_HOME'/input_files'
+IFS='
+'
+
+for file in `ls $INPUT_FILES_PATH`;do
+	rm -rf $INPUT_FILES_PATH/$file
+done
+
+for file in `ls $SORT_FILES_PATH`;do
+        rm -rf $SORT_FILES_PATH/$file
+done
+
+/home/rodsadmin/iRODS/clients/icommands/bin/iinit rods_*1234
+
+for file in `ls $OUT_FILES_PATH`;do
+	while read line;do
+		file_block=`echo $line | cut -d '|' -f $METAPOS_FILE`
+		metadata_block=`echo $line | cut --complement -d '|' -f $METAPOS_FILE`
+		if [ "$file_block" '!=' "- " ]; then
+			dir=`dirname "$file_block"`
+		fi
+		if [ "$dir" '==' "." ]; then
+			file=`basename $file_block`
+                	echo $metadata_block"|"$file >> $SORT_FILES_PATH/$machine/$input/$target_file
+		else
+			machine=`echo $dir | cut -d '/' -f 1`
+                	input=`echo $dir | cut -d '/' -f 2`
+			target_file=`echo $dir | sed -e "s/\///g"`
+			mkdir -p $SORT_FILES_PATH/$machine/$input
+			echo $metadata_block"|"$file_block > $SORT_FILES_PATH/$machine/$input/$target_file
+		fi	
+	done < $OUT_FILES_PATH/$file &
+done
+wait
+cd $SORT_FILES_PATH
+for dir in `ls $SORT_FILES_PATH`;do
+	for file in `find $dir -type f`;do
+		file_dir=`dirname $file`
+		mkdir -p $INPUT_FILES_PATH/$file_dir
+		cat -n $file|sort -k2,2 -u |sort -k1,1 -n|nawk ' { $1=""; gsub("^ ",""); print $0 } ' > $INPUT_FILES_PATH/$file
+	done
+done
+wait
+for dir in `ls $INPUT_FILES_PATH`;do
+	for root in `ls $INPUT_FILES_PATH/$dir`;do
+		for file in `ls $INPUT_FILES_PATH/$dir/$root`;do
+			/home/rodsadmin/syncgen2 $INPUT_FILES_PATH/$dir/$root/$file
+		done
+	done &
+done
+wait	

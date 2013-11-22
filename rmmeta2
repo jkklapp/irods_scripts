@@ -1,0 +1,8 @@
+#!/bin/sh
+for file in `find $1 -type f`;do
+	imeta lsw -d $file $2 $3 % > temp.$2.$3
+	N=`cat -s temp.$2.$3 | wc -l`
+	if [ $N '>' 1 ]; then
+		imeta rmw -d $file $2 $3 %
+	fi
+done
